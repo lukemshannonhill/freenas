@@ -7,7 +7,7 @@ import socket
 import ssl
 
 from middlewared.async_validators import validate_country
-from middlewared.schema import accepts, Dict, Int, List, Patch, Ref, Str
+from middlewared.schema import accepts, Bool, Dict, Int, List, Patch, Ref, Str
 from middlewared.service import CRUDService, private, ValidationErrors
 from middlewared.validators import Email, IpAddress, Range
 from OpenSSL import crypto, SSL
@@ -553,10 +553,13 @@ class CertificateService(CRUDService):
     # CERTIFICATE_CREATE_IMPORTED_CSR - __create_imported_csr
     # CERTIFICATE_CREATE              - __create_certificate
     # CERTIFICATE_CREATE_CSR          - __create_csr
+    # CERTIFICATE_CREATE_ACME         - Control moved from create function to ACME Service
 
     @accepts(
         Dict(
             'certificate_create',
+            Bool('tos'),
+            Dict('domain_dns_mapping', additional_attrs=True),
             Int('acme'),
             Int('csr_id'),
             Int('signedby'),
@@ -570,6 +573,7 @@ class CertificateService(CRUDService):
             Str('common'),
             Str('country'),
             Str('CSR'),
+            Str('directory_uri'),
             Str('email', validators=[Email()]),
             Str('name', required=True),
             Str('organization'),
@@ -580,7 +584,7 @@ class CertificateService(CRUDService):
             Str('create_type', enum=[
                 'CERTIFICATE_CREATE_INTERNAL', 'CERTIFICATE_CREATE_IMPORTED',
                 'CERTIFICATE_CREATE', 'CERTIFICATE_CREATE_CSR',
-                'CERTIFICATE_CREATE_IMPORTED_CSR'], required=True),
+                'CERTIFICATE_CREATE_IMPORTED_CSR', 'CERTIFICATE_CREATE_ACME'], required=True),
             Str('digest_algorithm', enum=['SHA1', 'SHA224', 'SHA256', 'SHA384', 'SHA512']),
             List('san', items=[Str('san')]),
             register=True
@@ -589,6 +593,13 @@ class CertificateService(CRUDService):
     async def do_create(self, data):
         if not data.get('san'):
             data.pop('san', None)
+
+        create_type = data.pop('create_type')
+        if create_type == 'CERTIFICATE_CREATE_ACME':
+            return await self.middleware.call(
+                'acme.create',
+                data
+            )
 
         verrors = await self.validate_common_attributes(data, 'certificate_create')
 
@@ -602,8 +613,8 @@ class CertificateService(CRUDService):
 
         # TODO: ENFORCE THAT THE RIGHT PARAMETERS GO TO THE NEXT CREATE FUNCTION
 
-        data = await self.middleware.run_in_thread(
-            self.map_functions[data.pop('create_type')],
+        data = await self.middleware.run_in_io_thread(
+            self.map_functions[create_type],
             data
         )
 
@@ -843,6 +854,15 @@ class CertificateService(CRUDService):
     )
     async def do_delete(self, id):
         certificate = await self._get_instance(id)
+
+        if await self.middleware.call(
+            'acme.query',
+            [['id', '=', id]]
+        ):
+            return await self.middleware.call(
+                'acme.delete',
+                id
+            )
 
         response = await self.middleware.call(
             'datastore.delete',
