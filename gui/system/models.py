@@ -774,10 +774,6 @@ class CertificateBase(Model):
         blank=True,
         null=True
     )
-    cert_expire = models.DateTimeField(
-        blank=True,
-        null=True
-    )
     cert_acme_uri = models.URLField(
         null=True,
         blank=True
@@ -1226,7 +1222,7 @@ class ACMERegistration(models.Model):
     )
     directory = models.URLField(
         verbose_name='Directory URI',
-        unique=True  # Is this the right step ?
+        unique=True
     )
     tos = models.URLField(
         verbose_name='Terms of Service'
