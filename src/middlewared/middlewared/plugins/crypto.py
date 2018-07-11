@@ -243,6 +243,11 @@ class CertificateService(CRUDService):
                 }
             )
 
+        # Remove ACME related keys if cert is not an ACME based cert
+        if not cert.get('acme'):
+            for key in ['acme', 'acme_uri', 'domains_authenticators', 'renew_days']:
+                cert.pop(key)
+
         # convert san to list
         cert['san'] = (cert.pop('san', '') or '').split()
         if cert['serial'] is not None:
@@ -728,10 +733,11 @@ class CertificateService(CRUDService):
         )
         progress = 0
         for cert in certs:
-            # TODO: Make the renew date customizable, perhaps add a field to the cert model
             progress += (100 / len(certs))
 
-            if (pytz.utc.localize(cert['expire']) - datetime.datetime.now(datetime.timezone.utc)).days < 10:
+            if (
+                    pytz.utc.localize(cert['expire']) - datetime.datetime.now(datetime.timezone.utc)
+            ).days < cert['renew_days']:
                 # renew cert
                 self.logger.debug(f'Renewing certificate {cert["name"]}')
                 final_order = self.issue_certificate(
@@ -815,6 +821,9 @@ class CertificateService(CRUDService):
                 data
             )
 
+        if not data.get('dns_mapping'):
+            data.pop('dns_mapping')  # Default dict added
+
         verrors = await self.validate_common_attributes(data, 'certificate_create')
 
         await validate_cert_name(
@@ -833,6 +842,9 @@ class CertificateService(CRUDService):
         )
 
         data['san'] = ' '.join(data.pop('san', []) or [])
+
+        # Patch creates another copy of dns_mapping
+        data.pop('dns_mapping', None)
 
         pk = await self.middleware.call(
             'datastore.insert',
@@ -1295,6 +1307,7 @@ class CertificateAuthorityService(CRUDService):
         Patch(
             'certificate_create', 'ca_create',
             ('edit', _set_enum('create_type')),
+            ('rm', {'name': 'dns_mapping'}),
             register=True
         )
     )
