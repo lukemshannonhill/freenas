@@ -3379,6 +3379,12 @@ class CertificateResourceMixin(object):
                             'id': bundle.obj.id
                         }
                     )
+                    bundle.data['_ACME_create_url'] = reverse(
+                        'CSR_edit',
+                        kwargs={
+                            'id': bundle.obj.id
+                        }
+                    )
 
                 bundle.data['_edit_url'] = reverse(
                     'certificate_edit',
