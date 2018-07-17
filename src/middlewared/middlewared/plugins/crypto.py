@@ -877,7 +877,7 @@ class CertificateService(CRUDService):
             'acme_create',
             Bool('tos', default=False),
             Int('csr_id', required=True),
-            Int('renew_days', default=10),
+            Int('renew_days', default=10, validators=[Range(min=1)]),
             Str('acme_directory_uri', required=True),
             Str('name', required=True),
             Dict('dns_mapping', additional_attrs=True, required=True)
@@ -886,7 +886,6 @@ class CertificateService(CRUDService):
     @skip_arg(count=1)
     def __create_acme_certificate(self, job, data):
 
-        data['acme_directory_uri'] += '/' if data['acme_directory_uri'][-1] != '/' else ''
         csr_data = self.middleware.call_sync(
             'certificate._get_instance', data['csr_id']
         )
@@ -894,6 +893,8 @@ class CertificateService(CRUDService):
         final_order = self.acme_issue_certificate(job, 25, data, csr_data)
 
         job.set_progress(95, 'Final order received from ACME server')
+
+        data['acme_directory_uri'] += '/' if data['acme_directory_uri'][-1] != '/' else ''
 
         cert_dict = {
             'acme': self.middleware.call_sync(
@@ -931,8 +932,12 @@ class CertificateService(CRUDService):
 
         req, key = self.create_certificate_signing_request(cert_info)
 
+        job.set_progress(80)
+
         data['CSR'] = crypto.dump_certificate_request(crypto.FILETYPE_PEM, req)
         data['privatekey'] = crypto.dump_privatekey(crypto.FILETYPE_PEM, key)
+
+        job.set_progress(90, 'Finalizing changes')
 
         return data
 
@@ -955,6 +960,8 @@ class CertificateService(CRUDService):
         for k, v in self.load_certificate_request(data['CSR']).items():
             data[k] = v
 
+        job.set_progress(80)
+
         if 'passphrase' in data:
             data['privatekey'] = export_private_key(
                 data['privatekey'],
@@ -962,6 +969,8 @@ class CertificateService(CRUDService):
             )
 
         data.pop('passphrase', None)
+
+        job.set_progress(90, 'Finalizing changes')
 
         return data
 
@@ -979,6 +988,8 @@ class CertificateService(CRUDService):
 
         for k, v in self.load_certificate(data['certificate']).items():
             data[k] = v
+
+        job.set_progress(90, 'Finalizing changes')
 
         return data
 
@@ -1021,6 +1032,8 @@ class CertificateService(CRUDService):
 
         if verrors:
             raise verrors
+
+        job.set_progress(50, 'Validation complete')
 
         data['type'] = CERT_TYPE_EXISTING
 
@@ -1078,6 +1091,8 @@ class CertificateService(CRUDService):
             crypto.X509Extension(b"subjectKeyIdentifier", False, b"hash", subject=cert),
         ])
 
+        job.set_progress(75)
+
         cert_serial = self.middleware.call_sync(
             'certificateauthority.get_serial_for_certificate',
             data['signedby']
@@ -1089,6 +1104,8 @@ class CertificateService(CRUDService):
         data['certificate'] = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
         data['privatekey'] = crypto.dump_privatekey(crypto.FILETYPE_PEM, public_key)
         data['serial'] = cert_serial
+
+        job.set_progress(90, 'Finalizing changes')
 
         return data
 
@@ -1137,6 +1154,8 @@ class CertificateService(CRUDService):
                 {'onetime': False}
             )
 
+        job.set_progress(90, 'Finalizing changes')
+
         return await self._get_instance(id)
 
     @private
@@ -1164,13 +1183,7 @@ class CertificateService(CRUDService):
     @job(lock='cert_delete')
     def do_delete(self, job, id, force=False):
 
-        certificate = self.middleware.call_sync(
-            'certificate.query',
-            [
-                ['id', '=', id],
-                ['acme', '!=', None]
-            ]
-        )
+        certificate = self.middleware.call_sync('certificate._get_instance', id)
 
         if certificate['acme']:
 
