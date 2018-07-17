@@ -3293,7 +3293,7 @@ class CertificateResourceMixin(object):
             if f'domain_{domain}' in deserialized:
                 data[f'domain_{n}'] = deserialized[f'domain_{domain}']
 
-        form = CertificateACMEForm(data=data, csr_id=csr_id, complete_job=True)
+        form = CertificateACMEForm(data=data, csr_id=csr_id, middleware_job_wait=True)
         if not form.is_valid():
             raise ImmediateHttpResponse(
                 response=self.error_response(request, form.errors)
@@ -3318,7 +3318,7 @@ class CertificateResourceMixin(object):
         if 'cert_passphrase2' not in deserialized and 'cert_passphrase' in deserialized:
             deserialized['cert_passphrase2'] = deserialized.get('cert_passphrase')
 
-        form = CertificateCSRImportForm(data=deserialized, complete_job=True)
+        form = CertificateCSRImportForm(data=deserialized, middleware_job_wait=True)
         if not form.is_valid():
             raise ImmediateHttpResponse(
                 response=self.error_response(request, form.errors)
@@ -3340,7 +3340,7 @@ class CertificateResourceMixin(object):
         else:
             deserialized = {}
 
-        form = CertificateCreateCSRForm(data=deserialized, complete_job=True)
+        form = CertificateCreateCSRForm(data=deserialized, middleware_job_wait=True)
         if not form.is_valid():
             raise ImmediateHttpResponse(
                 response=self.error_response(request, form.errors)
@@ -3365,7 +3365,7 @@ class CertificateResourceMixin(object):
         if 'cert_passphrase2' not in deserialized and 'cert_passphrase' in deserialized:
             deserialized['cert_passphrase2'] = deserialized.get('cert_passphrase')
 
-        form = CertificateImportForm(data=deserialized, complete_job=True)
+        form = CertificateImportForm(data=deserialized, middleware_job_wait=True)
         if not form.is_valid():
             raise ImmediateHttpResponse(
                 response=self.error_response(request, form.errors)
@@ -3387,7 +3387,7 @@ class CertificateResourceMixin(object):
         else:
             deserialized = {}
 
-        form = CertificateCreateInternalForm(data=deserialized, complete_job=True)
+        form = CertificateCreateInternalForm(data=deserialized, middleware_job_wait=True)
         if not form.is_valid():
             raise ImmediateHttpResponse(
                 response=self.error_response(request, form.errors)
